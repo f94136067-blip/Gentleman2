@@ -4,7 +4,7 @@ import { DEFAULTS, calibrate, initialState, step, faceLost } from "./counter.js"
 import { EXERCISES } from "./exercises.js";
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-const MODEL_URL = "const://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 // 校正時間軸（毫秒）：準備 2 秒 → 放鬆 3 秒 → 準備 2 秒 → 盡力 3 秒
 const CALIB_STEPS = [
@@ -14,7 +14,7 @@ const CALIB_STEPS = [
   { until: 10000, collect: "max", text: "盡力做並保持… 3 秒" },
 ];
 
-const exercise = EXERCISES.pucker;
+let exercise = EXERCISES.pucker;
 const $ = (id) => document.getElementById(id);
 const video = $("video");
 const canvas = $("overlay");
@@ -40,6 +40,45 @@ function options() {
 
 function say(text) { $("message").textContent = text; }
 function status(text) { $("status").textContent = text; }
+// 使用者切換動作時，清除舊資料並重新開始
+function changeExercise() {
+  // 取得下拉選單選擇的動作
+  const selected = $("exerciseSel").value;
+  exercise = EXERCISES[selected];
+
+  // 更新畫面上的動作名稱和提示
+  $("exName").textContent = exercise.name;
+  $("exHint").textContent = exercise.hint;
+
+  // 清除舊的校正資料
+  calib = null;
+  samples = { rest: [], max: [] };
+  calibStart = 0;
+
+  // 停止原本的校正或計數流程
+  mode = "idle";
+
+  // 清除舊的計數狀態
+  state = initialState();
+
+  // 清除校正提示
+  $("calibBanner").hidden = true;
+
+  // 尚未重新校正，因此不能使用次數歸零功能
+  $("resetBtn").disabled = true;
+
+  // 更新畫面，讓次數和進度條歸零
+  render();
+
+  // 提醒使用者重新校正
+  if (landmarker) {
+    say("已切換動作，請重新校正！");
+    status("動作已切換，等待重新校正");
+  } else {
+    say("已切換動作，請先開啟相機，再進行校正");
+    status("尚未開啟相機");
+  }
+}
 
 async function loadModel() {
   const files = await FilesetResolver.forVisionTasks(WASM_URL);
@@ -150,9 +189,9 @@ function loop() {
     if (mode === "calibrating") {
       calibrationTick(now, a);
     } else if (mode === "counting") {
-      state = a === null ? faceLost(state) : step(state, a, now, calib, options());
-      render();
-    } else {
+  state = a === null ? faceLost(state) : step(state, a, now, calib, options());
+  render();
+} else {
       status(landmarks ? "相機運作中，已偵測到臉" : "偵測不到臉：請正對鏡頭、讓臉部光線充足");
     }
   }
@@ -162,3 +201,37 @@ function loop() {
 $("startBtn").addEventListener("click", start);
 $("calibBtn").addEventListener("click", startCalibration);
 $("resetBtn").addEventListener("click", () => { state = initialState(); render(); });
+
+// 切換動作時，清除舊的校正資料並重新開始
+$("exerciseSel").addEventListener("change", (event) => {
+  // 根據下拉選單選擇新的動作
+  exercise = EXERCISES[event.target.value];
+
+  // 更新畫面上的動作名稱與提示
+  $("exName").textContent = exercise.name;
+  $("exHint").textContent = exercise.hint;
+
+  // 清除舊的校正結果與校正樣本
+  calib = null;
+  samples = { rest: [], max: [] };
+
+  // 停止目前的計數或校正流程
+  mode = "idle";
+
+  // 次數歸零，進度重新開始
+  state = initialState();
+  render();
+
+  // 隱藏校正提示，並要求重新校正
+  $("calibBanner").hidden = true;
+  $("resetBtn").disabled = true;
+
+  if (landmarker) {
+    $("calibBtn").disabled = false;
+    say("動作已切換，請重新按「校正」");
+  } else {
+    say("動作已切換，請先開啟相機，再重新校正");
+  }
+
+  status("已切換動作，舊的校正結果已清除");
+});

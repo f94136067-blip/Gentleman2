@@ -177,3 +177,72 @@ test("smile measure = mouth width / face width, independent of distance to camer
   assert.ok(Math.abs(near - 0.4) < 1e-9);
   assert.ok(Math.abs(near - far) < 1e-9);
 });
+
+
+// 左臉頰鼓起：確認 measure() 不受臉離鏡頭遠近影響
+test("leftCheek measure is independent of distance to camera", () => {
+  // 建立模擬臉部，scale 越小代表臉離鏡頭越遠
+  const face = (scale) => {
+    const lm = Array.from(
+      { length: 478 },
+      () => ({ x: 0.5, y: 0.5 })
+    );
+
+    // 左臉頰下方偵測點
+    lm[LM.cheekLeftLower] = {
+      x: 0.5 - 0.12 * scale,
+      y: 0.5 + 0.12 * scale
+    };
+
+    // 鼻尖參考點
+    lm[LM.noseTip] = {
+      x: 0.5,
+      y: 0.5
+    };
+
+    // 左右眼外眼角
+    lm[LM.eyeOuterRight] = {
+      x: 0.5 - 0.2 * scale,
+      y: 0.5
+    };
+
+    lm[LM.eyeOuterLeft] = {
+      x: 0.5 + 0.2 * scale,
+      y: 0.5
+    };
+
+    return lm;
+  };
+
+  // 模擬臉靠近鏡頭
+  const near = EXERCISES.leftCheek.measure(
+    face(1.0), 640, 480
+  );
+
+  // 模擬臉遠離鏡頭
+  const far = EXERCISES.leftCheek.measure(
+    face(0.5), 640, 480
+  );
+
+  // 確認遠近兩種情況的量測結果相同
+  assert.ok(Math.abs(near - far) < 1e-9);
+});
+
+
+test("reaching target count shows completion message and stops counting", () => {
+  // 將目標次數設定為 1 下，方便測試
+  const opts = { ...NO_SMOOTH, targetCount: 1 };
+
+  // 模擬完成一次動作
+  const first = run([[0, 500], [0.9, 3200]], PUCKER, opts);
+
+  // 確認次數是 1，並且出現完成訊息
+  assert.equal(first.count, 1);
+  assert.equal(first.message, "完成今天的練習！");
+
+  // 達標後再次輸入動作，確認次數不會繼續增加
+  const next = step(first, level(0.9), 5000, PUCKER, opts);
+
+  assert.equal(next.count, 1);
+  assert.equal(next.message, "完成今天的練習！");
+});
